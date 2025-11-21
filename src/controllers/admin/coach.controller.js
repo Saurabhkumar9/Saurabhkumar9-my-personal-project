@@ -203,6 +203,10 @@ export const assignBatchesToCoach = async (req, res, next) => {
     if (!coach) {
       return next(handleErrors(404, "Coach not found"));
     }
+    console.log(coach.status)
+    if(coach.status !=="active"){
+      return next(handleErrors(403, "Only active coach allow assign Batches."));
+    }
 
     // Validate batches
     const validBatches = await Batch.find({ 
@@ -297,55 +301,79 @@ export const assignBatchesToCoach = async (req, res, next) => {
 };
 
 // Unassign batch from coach
-export const unassignBatchFromCoach = async (req, res, next) => {
+export const unassignBatchesFromCoach = async (req, res, next) => {
   try {
-    const { coachId, batchId } = req.params;
+    const { coachId } = req.params;
+    const { batchIds } = req.body;
     const adminId = req.admin.id;
 
-    // Verify coach exists and belongs to admin
+    if (!Array.isArray(batchIds) || batchIds.length === 0) {
+      return next(handleErrors(400, "batchIds must be a non-empty array"));
+    }
+
+    // Coach verify
     const coach = await Coach.findOne({ _id: coachId, adminId });
-    if (!coach) {
-      return next(handleErrors(404, "Coach not found"));
+    if (!coach) return next(handleErrors(404, "Coach not found"));
+
+    // Get all batches from DB
+    const batches = await Batch.find({ _id: { $in: batchIds }, adminId });
+
+    if (batches.length !== batchIds.length) {
+      return next(handleErrors(400, "One or more batches not found"));
     }
 
-    // Verify batch exists and belongs to admin
-    const batch = await Batch.findOne({ _id: batchId, adminId });
-    if (!batch) {
-      return next(handleErrors(404, "Batch not found"));
+    // Check if batches are actually assigned to this coach
+    const notAssigned = batches.filter(
+      (batch) => batch.coachId?.toString() !== coachId
+    );
+
+    if (notAssigned.length > 0) {
+      return next(
+        handleErrors(
+          400,
+          `These batches are not assigned to this coach: ${notAssigned
+            .map((b) => b.batchName)
+            .join(", ")}`
+        )
+      );
     }
 
-    // Verify batch is assigned to this coach
-    if (batch.coachId?.toString() !== coachId) {
-      return next(handleErrors(400, "Batch is not assigned to this coach"));
-    }
-
-    // Remove batch from coach's assigned batches
+    // Remove selected batches from coach's assignedBatches
     coach.assignedBatches = coach.assignedBatches.filter(
-      batch => batch.toString() !== batchId
+      (batchId) => !batchIds.includes(batchId.toString())
     );
     await coach.save();
 
-    // Remove coach from batch
-    batch.coachId = null;
-    batch.coachName = null;
-    await batch.save();
+    // FIX: Update only the specific batches that were unassigned
+    await Batch.updateMany(
+      { 
+        _id: { $in: batchIds }, // Only update the specific batch IDs
+        coachId: coachId // Ensure they're currently assigned to this coach
+      },
+      { 
+        $unset: { 
+          coachId: "", 
+          coachName: "" 
+        }
+      }
+    );
 
-    await coach.populate('assignedBatches', 'batchName timing fee status weekDays');
+    const updatedCoach = await Coach.findById(coachId).populate(
+      "assignedBatches",
+      "batchName timing fee status weekDays"
+    );
 
     res.status(200).json({
       success: true,
-      message: "Batch unassigned successfully",
-      coach: {
-        _id: coach._id,
-        name: coach.name,
-        assignedBatches: coach.assignedBatches,
-        batchCount: coach.assignedBatches.length
-      },
+      message: "Batches unassigned successfully",
+      unassignedCount: batchIds.length,
+      coach: updatedCoach,
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 // Get batches assigned to specific coach
 export const getCoachBatches = async (req, res, next) => {
@@ -397,7 +425,7 @@ export const updateCoachStatus = async (req, res, next) => {
       await Batch.updateMany(
         { coachId: coachId },
         { 
-          $unset: { coachId: "", coachName: "" }
+          $unset: { coachId: '', coachName: "" }
         }
       );
 

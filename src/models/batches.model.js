@@ -47,7 +47,8 @@ const batchSchema = new mongoose.Schema(
     
     coachName: {
       type: String,
-      trim:true
+      trim:true,
+      default:""
     }
   },
   {

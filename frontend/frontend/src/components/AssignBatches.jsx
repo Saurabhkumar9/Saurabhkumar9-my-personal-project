@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useCoach } from "../context/CoachContext";
 import { useBatch } from "../context/BatchContext";
@@ -8,7 +8,7 @@ const AssignBatches = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { coaches, assignBatchesToCoach } = useCoach();
-  const { batches } = useBatch();
+  const { batches,fetchBatches } = useBatch();
 
   const [selectedBatches, setSelectedBatches] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -21,6 +21,24 @@ const AssignBatches = () => {
       setSelectedBatches(coach.assignedBatches?.map(batch => batch._id) || []);
     }
   }, [id, coaches]);
+
+  
+  const unassignedBatches = useMemo(() => {
+    if (!batches || !coaches) return [];
+    
+    // Get all assigned batch IDs across all coaches
+    const allAssignedBatchIds = new Set();
+    coaches.forEach(coach => {
+      if (coach.assignedBatches && coach.assignedBatches.length > 0) {
+        coach.assignedBatches.forEach(batch => {
+          allAssignedBatchIds.add(batch._id);
+        });
+      }
+    });
+
+    // Filter batches that are not assigned to any coach
+    return batches.filter(batch => !allAssignedBatchIds.has(batch._id));
+  }, [batches, coaches]);
 
   const toggleBatchSelection = (batchId) => {
     setSelectedBatches((prev) =>
@@ -37,9 +55,16 @@ const AssignBatches = () => {
     setLoading(true);
     try {
       const result = await assignBatchesToCoach(id, selectedBatches);
-      
+      if (result.success) {
+        // toast.success("Batches assigned successfully!");
+        fetchBatches()
+        navigate(-1);
+      } else {
+        toast.error(result.message || "Failed to assign batches");
+      }
     } catch (error) {
       console.error("Assign batches error:", error);
+      toast.error("An error occurred while assigning batches");
     } finally {
       setLoading(false);
     }
@@ -67,7 +92,7 @@ const AssignBatches = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
             </svg>
           </div>
-          <h1 className="text-sm sm:text-xl lg:text-xl font-bold bg-black  bg-clip-text text-transparent mb-2">
+          <h1 className="text-sm sm:text-xl lg:text-xl font-bold bg-black bg-clip-text text-transparent mb-2">
             Assign Batches
           </h1>
           <p className="text-gray-600 text-sm sm:text-base">
@@ -77,7 +102,7 @@ const AssignBatches = () => {
         </div>
 
         {/* Enhanced Form Card */}
-        <div className=" rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-2xl">
+        <div className="rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-2xl">
           {/* Card Header Gradient */}
           <div className="bg-blue-500 px-6 py-4">
             <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
@@ -126,14 +151,15 @@ const AssignBatches = () => {
                   </span>
                 </div>
                 
-                {batches.length === 0 ? (
+                {unassignedBatches.length === 0 ? (
                   <div className="text-center p-6 sm:p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 transition-all duration-300 hover:border-purple-400 hover:bg-purple-50">
                     <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
                       <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
-                    <p className="text-gray-600 mb-3 text-sm sm:text-base">No batches available</p>
+                    <p className="text-gray-600 mb-3 text-sm sm:text-base">No unassigned batches available</p>
+                    <p className="text-gray-500 text-xs mb-4">All batches are currently assigned to coaches</p>
                     <button
                       type="button"
                       onClick={() => navigate("/admin/create-batch")}
@@ -142,12 +168,12 @@ const AssignBatches = () => {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
-                      Create your first batch
+                      Create new batch
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-72 sm:max-h-80 overflow-y-auto p-3 border border-gray-200 rounded-xl bg-gray-50/50 custom-scrollbar">
-                    {batches.map((batch) => (
+                    {unassignedBatches.map((batch) => (
                       <label
                         key={batch._id}
                         className={`flex items-center space-x-3 p-3 sm:p-4 rounded-xl cursor-pointer border transition-all duration-200 ${
@@ -172,15 +198,24 @@ const AssignBatches = () => {
                             <span className="text-sm sm:text-base font-semibold text-gray-900 truncate">
                               {batch.batchName}
                             </span>
-                            {batch.batchTime && (
+                            {batch.timing && (
                               <span className="text-xs sm:text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded-full font-medium">
-                                {batch.batchTime}
+                                {batch.timing}
                               </span>
                             )}
                           </div>
-                          {batch.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-1">{batch.description}</p>
-                          )}
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {batch.fee && (
+                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                Fee: ₹{batch.fee}
+                              </span>
+                            )}
+                            {batch.weekDays && batch.weekDays.length > 0 && (
+                              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                                Days: {batch.weekDays.join(', ')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </label>
                     ))}
@@ -214,8 +249,8 @@ const AssignBatches = () => {
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="flex-1 py-3 px-4 sm:px-6 bg-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  disabled={loading || selectedBatches.length === 0}
+                  className="flex-1 py-3 px-4 sm:px-6 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   {loading ? (
                     <>
@@ -237,20 +272,24 @@ const AssignBatches = () => {
         </div>
 
         {/* Quick Stats Footer */}
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
           <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
             <div className="text-lg sm:text-xl font-bold text-purple-600">{batches.length}</div>
             <div className="text-xs sm:text-sm text-gray-600">Total Batches</div>
           </div>
           <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
-            <div className="text-lg sm:text-xl font-bold text-blue-600">{selectedBatches.length}</div>
+            <div className="text-lg sm:text-xl font-bold text-blue-600">{unassignedBatches.length}</div>
+            <div className="text-xs sm:text-sm text-gray-600">Available</div>
+          </div>
+          <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+            <div className="text-lg sm:text-xl font-bold text-green-600">{selectedBatches.length}</div>
             <div className="text-xs sm:text-sm text-gray-600">Selected</div>
           </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 col-span-2 sm:col-span-1">
-            <div className="text-lg sm:text-xl font-bold text-green-600">
+          <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+            <div className="text-lg sm:text-xl font-bold text-orange-600">
               {currentCoach.assignedBatches?.length || 0}
             </div>
-            <div className="text-xs sm:text-sm text-gray-600">Currently Assigned</div>
+            <div className="text-xs sm:text-sm text-gray-600">Current</div>
           </div>
         </div>
       </div>

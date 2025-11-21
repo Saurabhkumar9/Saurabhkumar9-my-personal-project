@@ -4,7 +4,7 @@ import { generateToken, generateDeviceId } from "../../utils/jwt.js";
 import { getDeviceInfo } from "../../utils/deviceFingerprint.js";
 import crypto from "crypto";
 import transporter from "../../services/transporter.js";
-
+import cloudinary from "../../config/cloudinary.config.js";
 /**
  * Register Admin
  */
@@ -239,7 +239,7 @@ export const getProfile = async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin._id).select("-password");
 
-    console.log(admin)
+  
     
     res.json({
       success: true,
@@ -258,35 +258,44 @@ export const getProfile = async (req, res) => {
 /**
  * Update Profile (Name & Image)
  */
+
+
 export const updateProfile = async (req, res) => {
   try {
-    const { name } = req.body;
     const admin = req.admin;
+    
 
-    if (name) admin.name = name.trim();
     if (req.file) {
+      
+      
+      // Direct update without deletion
       admin.profile = req.file.path;
       admin.profile_id = req.file.filename;
+      
+      await admin.save();
+      
+      return res.json({
+        success: true,
+        message: "Profile updated successfully",
+        admin: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email,
+          profile: admin.profile
+        }
+      });
     }
 
-    await admin.save();
-
-    res.json({
-      success: true,
-      message: "Profile updated successfully",
-      admin: {
-        id: admin._id,
-        name: admin.name,
-        email: admin.email,
-        profile: admin.profile
-      }
+    res.status(400).json({
+      success: false,
+      message: "No file provided"
     });
 
   } catch (error) {
-    console.error("Update profile error:", error);
+    console.error("Update error:", error);
     res.status(500).json({
       success: false,
-      message: "Profile update failed"
+      message: "Update failed"
     });
   }
 };

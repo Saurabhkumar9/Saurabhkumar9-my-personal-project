@@ -3,7 +3,7 @@ import express from 'express';
 import {
   createBatch,
   getBatches,
-  getBatch,
+  getBatchById,
   updateBatch,
   deleteBatch,
   assignCoach
@@ -14,7 +14,7 @@ const BatchRouter = express.Router();
 
 BatchRouter.post('/register/batch', authenticateAdmin, createBatch);
 BatchRouter.get('/fetch/batch', authenticateAdmin, getBatches);
-BatchRouter.get('/batch-fetch/:id', authenticateAdmin, getBatch);
+BatchRouter.get('/batch-fetch/:id', authenticateAdmin, getBatchById);
 BatchRouter.put('/update/batch/:id', authenticateAdmin, updateBatch);
 BatchRouter.delete('/delete/batch/:id', authenticateAdmin, deleteBatch);
 BatchRouter.patch('/batch/assign/:id/assign-coach', authenticateAdmin, assignCoach);

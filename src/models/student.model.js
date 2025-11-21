@@ -39,10 +39,22 @@ const studentSchema = new mongoose.Schema(
     },
     
     // New Image Fields
-    profile: String,
-    profile_id: String,
-    aadharCardImage: String,
-    aadharCardImage_id: String,
+    profile: {
+      type:String,
+      default:''
+    },
+    profile_id:  {
+      type:String,
+      default:''
+    },
+    aadharCardImage: {
+      type:String,
+      default:''
+    },
+    aadharCardImage_id:  {
+      type:String,
+      default:''
+    },
     
     adminId: {
       type: mongoose.Schema.Types.ObjectId,

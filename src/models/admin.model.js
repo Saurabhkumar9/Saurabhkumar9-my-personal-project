@@ -31,8 +31,14 @@ const adminSchema = new mongoose.Schema(
     otp: String,
 
     // Profile
-    profile: String,
-    profile_id: String,
+    profile:  {
+      type:String,
+      default:''
+    },
+    profile_id:  {
+      type:String,
+      default:''
+    },
 
     // Device Management (Max 2 devices)
     deviceSessions: [

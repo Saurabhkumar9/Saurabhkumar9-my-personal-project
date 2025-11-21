@@ -27,6 +27,8 @@ import ExcelUpload from "./pages/admin/ExcelUpload";
 import { CoachSessionProvider } from "./coachcontext/CoachSessionContext";
 import CreateStudentByCoach from "./pages/coaches/CreateStudentByCoach";
 import ExcelUploadByCoach from "./pages/coaches/ExcelUploadByCoach";
+import UnassignBatches from "./components/UnassignBatches";
+import AdminProfile from "./pages/admin/AdminProfile";
 
 export default function App() {
   return (
@@ -53,6 +55,47 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/admin/dashboard"
+                  element={
+                    <AdminRoute>
+                      <Dashboard />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin-profile"
+                  element={
+                    <AdminRoute>
+                      <AdminProfile />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/batches"
+                  element={
+                    <AdminRoute>
+                      <Dashboard />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/coaches"
+                  element={
+                    <AdminRoute>
+                      <Dashboard />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/students"
+                  element={
+                    <AdminRoute>
+                      <Dashboard />
+                    </AdminRoute>
+                  }
+                />
+                
+                <Route
                   path="/admin/create-batch"
                   element={
                     <AdminRoute>
@@ -73,6 +116,14 @@ export default function App() {
                   element={
                     <AdminRoute>
                       <AssignBatches />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/unassign-batches/:id"
+                  element={
+                    <AdminRoute>
+                      <UnassignBatches/>
                     </AdminRoute>
                   }
                 />

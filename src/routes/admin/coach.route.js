@@ -7,7 +7,7 @@ import {
   updateCoachStatus,
   assignBatchesToCoach,
   deleteCoach,
-  unassignBatchFromCoach,
+  unassignBatchesFromCoach,
   getCoachBatches
 } from '../../controllers/admin/coach.controller.js';
 import { authenticateAdmin } from '../../middleware/auth.admin.js';
@@ -24,7 +24,7 @@ CoachRouter.put('/assign/batch/:id/assign-batches', authenticateAdmin, assignBat
 CoachRouter.delete('/delete/coach/:id', authenticateAdmin, deleteCoach);
 
 // New routes for batch assignment management
-CoachRouter.delete('/unassign/batch/:coachId/:batchId', authenticateAdmin, unassignBatchFromCoach);
+CoachRouter.post('/unassign/batch/:coachId', authenticateAdmin, unassignBatchesFromCoach);
 CoachRouter.get('/fetch/coach-batches/:id', authenticateAdmin, getCoachBatches);
 
 export default CoachRouter;

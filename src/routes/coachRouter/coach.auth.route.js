@@ -10,7 +10,8 @@ import { authenticateCoach } from "../../middleware/auth.coach.js";
 const CoachAuthRouter = express.Router();
 
 // Public routes
-CoachAuthRouter.post('/send-opt', sendOtpForVerifyCoach)
+CoachAuthRouter.post('/send-otp', sendOtpForVerifyCoach)
+// CoachAuthRouter.post('/send-otp', sendOtpForVerifyCoach)
 CoachAuthRouter.post('/login-coach', verifyCoachAndLogin)
 
 

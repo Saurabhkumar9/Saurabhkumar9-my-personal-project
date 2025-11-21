@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "./AuthContext";
 import { toast } from "react-toastify";
+import { useBatch } from "./BatchContext";
 
 export const CoachContext = createContext();
 
@@ -10,6 +11,7 @@ export const CoachProvider = ({ children }) => {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const {fetchBatches}=useBatch()
 
   // Fetch all coaches for admin
   const fetchCoaches = async () => {
@@ -133,6 +135,7 @@ export const CoachProvider = ({ children }) => {
           )
         );
         toast.success("Batches assigned successfully! ✅");
+        fetchBatches()
         return { success: true, coach: data.coach };
       } else {
         toast.error(data.message || "Failed to assign batches");
@@ -202,7 +205,9 @@ export const CoachProvider = ({ children }) => {
         setCoaches(prev =>
           prev.map(c => (c._id === coachId ? { ...c, status } : c))
         );
+         fetchBatches()
         toast.success(`Coach ${status} successfully!`);
+       
         return { success: true };
       } else {
         toast.error(data.message || "Failed to update coach status");

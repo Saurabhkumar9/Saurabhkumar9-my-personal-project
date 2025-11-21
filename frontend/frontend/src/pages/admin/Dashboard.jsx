@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import StatsCard from "../../components/ui/StatsCard";
 import Batches from "./Batches";
 import Coaches from "./Coaches";
@@ -8,10 +9,18 @@ import { useCoach } from "../../context/CoachContext";
 import { useStudent } from "../../context/StudentContext";
 
 const Dashboard = () => {
-  const {students}=useStudent()
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { students } = useStudent();
+  
   const { batches, loading: batchesLoading } = useBatch();
   const { coaches, loading: coachesLoading } = useCoach();
+
+  // Get current active tab from URL path
+  const currentPath = location.pathname;
+  const activeTab = currentPath.includes('/batches') ? 'batches' : 
+                   currentPath.includes('/coaches') ? 'coaches' :
+                   currentPath.includes('/students') ? 'students' : 'dashboard';
 
   // Calculate statistics from real data
   const activeBatches = batches.filter(batch => batch.status === 'active').length;
@@ -21,7 +30,8 @@ const Dashboard = () => {
   const inactiveCoachesCount = coaches.filter(coach => coach.status === 'inactive').length;
   
   // Calculate total students across all batches
-  const totalStudents = students?.length || 0
+  const totalStudents = students?.length || 0;
+  
   // Calculate batches with assigned coaches
   const batchesWithCoaches = batches.filter(batch => {
     return coaches.some(coach => 
@@ -62,21 +72,14 @@ const Dashboard = () => {
     }
   ];
 
-  // Recent batches for quick overview
-  const recentBatches = batches.slice(0, 4).map(batch => ({
-    name: batch.batchName,
-    role: `Students: ${batch.students?.length || 0}`,
-    status: batch.status,
-    avatar: batch.batchName.split(' ').map(n => n[0]).join('').toUpperCase()
-  }));
-
-  // Recent coaches for quick overview
-  const recentCoaches = coaches.slice(0, 4).map(coach => ({
-    name: coach.name,
-    role: `Batches: ${coach.assignedBatches?.length || 0}`,
-    status: coach.status,
-    avatar: coach.name.split(' ').map(n => n[0]).join('').toUpperCase()
-  }));
+  // Navigation handlers
+  const handleNavigation = (tab) => {
+    if (tab === 'dashboard') {
+      navigate('/admin/dashboard');
+    } else {
+      navigate(`/admin/${tab}`);
+    }
+  };
 
   if (batchesLoading || coachesLoading) {
     return (
@@ -96,7 +99,7 @@ const Dashboard = () => {
         {["dashboard", "batches", "coaches", "students"].map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleNavigation(tab)}
             className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 shadow-sm ${
               activeTab === tab
                 ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md"
@@ -133,9 +136,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Quick Overview Sections */}
-          
-
           {/* Quick Actions */}
           <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4">
@@ -143,7 +143,7 @@ const Dashboard = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button
-                onClick={() => setActiveTab('batches')}
+                onClick={() => handleNavigation('batches')}
                 className="p-4 text-left bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors border border-purple-200"
               >
                 <div className="text-2xl mb-2">📚</div>
@@ -152,7 +152,7 @@ const Dashboard = () => {
               </button>
               
               <button
-                onClick={() => setActiveTab('coaches')}
+                onClick={() => handleNavigation('coaches')}
                 className="p-4 text-left bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200"
               >
                 <div className="text-2xl mb-2">👨‍🏫</div>
@@ -161,7 +161,7 @@ const Dashboard = () => {
               </button>
               
               <button
-                onClick={() => setActiveTab('students')}
+                onClick={() => handleNavigation('students')}
                 className="p-4 text-left bg-green-50 rounded-lg hover:bg-green-100 transition-colors border border-green-200"
               >
                 <div className="text-2xl mb-2">👨‍🎓</div>
@@ -173,6 +173,7 @@ const Dashboard = () => {
         </>
       )}
 
+      {/* Render components based on route */}
       {activeTab === "batches" && <Batches />}
       {activeTab === "coaches" && <Coaches />}
       {activeTab === "students" && <Students />}

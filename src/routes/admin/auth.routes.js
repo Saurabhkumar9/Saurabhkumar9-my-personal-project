@@ -28,6 +28,6 @@ authRouter.post("/password-reset", resetPassword);
 
 authRouter.post("/logout", authenticateAdmin,logout);
 authRouter.get("/profile",authenticateAdmin, getProfile);
-authRouter.put("/profile",authenticateAdmin, upload.single("profile"), updateProfile);
+authRouter.post("/profile/update",authenticateAdmin, upload.single("profile"), updateProfile);
 
 export default authRouter;

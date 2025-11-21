@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
     pendingName: "",
     deviceId: localStorage.getItem("deviceId") || generateDeviceId()
   });
+  const [PreviewUrl,setPreviewUrl]=useState()
 
   // Generate secure device ID
   function generateDeviceId() {
@@ -257,7 +258,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const sendCoachOtp = async (email) => {
-    const data = await apiCall("/coach/send-opt", { email }, "post", true);
+    const data = await apiCall("/coach/send-otp", { email }, "post", true);
     
     if (data.success) {
       updateAuthState({ otpSent: true, pendingEmail: email });
@@ -297,10 +298,62 @@ export const AuthProvider = ({ children }) => {
 
   // Force logout without confirmation (for token expiration etc.)
   const forceLogout = async () => {
-    console.log("Force logout initiated");
+    // console.log("Force logout initiated");
     await clearAuth(false);
     window.location.href = "/auth";
   };
+
+
+
+  // new change
+
+  const fetchProfile = async () => {
+    try {
+     
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/admin/profile`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      
+      
+     
+      if (response.data.success) {
+        
+        
+        if (response?.data?.admin?.profile) {
+          setPreviewUrl(response.data.admin.profile);
+        }
+      }
+    } catch (error) {
+      console.error("Fetch profile error:", error);
+      toast.error("Failed to load profile");
+    } finally {
+      
+    }
+  };
+
+ 
+
+useEffect(() => {
+  const token = localStorage.getItem("token");
+  const userString = localStorage.getItem("user");
+
+  if (!userString) return;  
+
+  const user = JSON.parse(userString);
+
+ 
+
+  // Call only for admin
+  if (token && user.role === "admin") {
+    fetchProfile();
+  }
+
+}, []);
+
+
 
   const value = {
     ...authState,
@@ -317,6 +370,8 @@ export const AuthProvider = ({ children }) => {
     resetPassword,
     logout,
     forceLogout,
+    PreviewUrl,
+    setPreviewUrl
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -6,7 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-  const { user, logout, isAuthenticated, hasProfile } = useAuth();
+  const { user, logout, isAuthenticated, hasProfile,PreviewUrl } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -38,10 +38,10 @@ const Navbar = () => {
 
   // Profile image or placeholder
   const getProfileImage = () => {
-    if (hasProfile && user?.profile) {
+    if (PreviewUrl) {
       return (
         <img 
-          src={user.profile} 
+          src={PreviewUrl} 
           alt="Profile" 
           className="w-8 h-8 rounded-full object-cover border-2 border-white"
         />
