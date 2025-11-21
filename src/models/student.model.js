@@ -59,26 +59,44 @@ const studentSchema = new mongoose.Schema(
     },
 
     // Fee Details
-    fee: [
+     fee: [
       {
-        month: String,
-        status: String,
-        date: Date,
-        amount: Number
+        month: {
+          type: String,
+          required: [true, "Month name is required"],
+          trim: true,
+        },
+        status: {
+          type: String,
+          
+        },
+        Date:{
+          type:Date
+        },
+        amount:{
+          type:Number
+        }
+
       },
     ],
     
     createdBy: String,
 
     // Attendance
-    attendance: [
+     attendance: [
       {
-        date: Date,
+        date: {
+          type: Date,
+          default: Date.now,
+        },
         status: {
           type: String,
           enum: ["present", "absent", "leave"],
         },
-        remark: String,
+        remark: {
+          type: String,
+          trim: true,
+        },
       },
     ],
   },

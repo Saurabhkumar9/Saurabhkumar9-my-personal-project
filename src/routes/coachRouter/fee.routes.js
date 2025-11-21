@@ -1,23 +1,16 @@
-import express from 'express';
-import {
-  payFee,
-  payFeeCurrentMonth,
-  unpayFee,
-  getFeeReport,
-  getPendingFees
-} from '../controllers/fee.controller.js';
-import { authenticate, updateActivity } from '../middleware/auth.js';
+// In your routes file (admin.routes.js)
+import express from "express";
+import { payFee,UnpayFee,payFeeCurrentMonth } from "../../controllers/coachController/fee.controller.js";
 
-const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate, updateActivity);
+const FeeRouter = express.Router();
 
-// Fee operations
-router.post('/pay', payFee);
-router.post('/bulk-pay', payFeeCurrentMonth);
-router.post('/unpay', unpayFee);
-router.get('/report', getFeeReport);
-router.get('/pending', getPendingFees);
+// Coach routes
 
-export default router;
+FeeRouter.post('/pay/fee',payFee )
+FeeRouter.post('/unpay/fee',UnpayFee )
+FeeRouter.post('/pay/fee/multiple-student/currentmonth',payFeeCurrentMonth )
+
+
+
+export default FeeRouter;

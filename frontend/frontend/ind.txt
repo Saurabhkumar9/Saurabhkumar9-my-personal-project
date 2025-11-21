@@ -1,0 +1,586 @@
+import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
+import * as XLSX from "xlsx";
+
+const CreateCoach = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("single");
+  const [excelFile, setExcelFile] = useState(null);
+  const [excelData, setExcelData] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedBatches, setSelectedBatches] = useState([]);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm({
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      specialization: "",
+      experience: "",
+      qualification: "",
+      salary: ""
+    }
+  });
+
+  const availableBatches = [
+    "Batch A - Mathematics",
+    "Batch B - Science",
+    "Batch C - English",
+    "Batch D - Physics",
+    "Batch E - Chemistry",
+    "Batch F - Biology",
+    "Batch G - Computer Science",
+    "Batch H - Advanced Math"
+  ];
+
+  const specializations = [
+    "Mathematics",
+    "Science",
+    "English",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "Computer Science",
+    "Other"
+  ];
+
+  const toggleBatchSelection = (batch) => {
+    setSelectedBatches(prev =>
+      prev.includes(batch)
+        ? prev.filter(b => b !== batch)
+        : [...prev, batch]
+    );
+  };
+
+  // Single coach submission
+  const onSubmit = async (data) => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const coachData = {
+        ...data,
+        batches: selectedBatches,
+        avatar: data.name.split(' ').map(n => n[0]).join(''),
+        id: Date.now(),
+        status: 'active',
+        joinDate: new Date().toISOString()
+      };
+      console.log("New Coach Created:", coachData);
+      alert("✅ Coach created successfully!");
+      reset();
+      setSelectedBatches([]);
+      navigate("/admin/coaches");
+    } catch (error) {
+      alert("❌ Failed to create coach. Please try again.");
+    }
+  };
+
+  // Handle Excel file upload and parsing
+  const handleExcelUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setExcelFile(file);
+    setIsProcessing(true);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Process and validate the data
+        const processedData = processExcelData(jsonData);
+        setExcelData(processedData);
+        
+        console.log("Processed Excel Data:", processedData);
+      } catch (error) {
+        console.error("Error processing Excel file:", error);
+        alert("❌ Error reading Excel file. Please check the format.");
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Process and validate Excel data
+  const processExcelData = (data) => {
+    return data.map((row, index) => {
+      // Map Excel columns to our coach fields
+      const coach = {
+        id: Date.now() + index,
+        name: row['Name'] || row['name'] || '',
+        email: row['Email'] || row['email'] || '',
+        phone: row['Phone'] || row['phone'] || row['Phone Number'] || '',
+        specialization: row['Specialization'] || row['specialization'] || '',
+        experience: parseInt(row['Experience'] || row['experience'] || '0'),
+        qualification: row['Qualification'] || row['qualification'] || '',
+        salary: parseInt(row['Salary'] || row['salary'] || row['Monthly Salary'] || '0'),
+        batches: parseBatches(row['Batches'] || row['batches'] || ''),
+        avatar: (row['Name'] || row['name'] || '').split(' ').map(n => n[0]).join(''),
+        status: 'active',
+        joinDate: new Date().toISOString(),
+        // Validation flags
+        isValid: validateCoachData(row),
+        errors: validateCoachData(row) ? [] : getValidationErrors(row)
+      };
+      
+      return coach;
+    }).filter(coach => coach.name.trim() !== ''); // Remove empty rows
+  };
+
+  // Parse batches from Excel (comma-separated)
+  const parseBatches = (batchesString) => {
+    if (!batchesString) return [];
+    return batchesString.split(',').map(batch => batch.trim()).filter(batch => batch);
+  };
+
+  // Validate coach data from Excel
+  const validateCoachData = (row) => {
+    const name = row['Name'] || row['name'] || '';
+    const email = row['Email'] || row['email'] || '';
+    const specialization = row['Specialization'] || row['specialization'] || '';
+    
+    return name.trim() !== '' && 
+           email.includes('@') && 
+           specialization.trim() !== '';
+  };
+
+  // Get validation errors for a row
+  const getValidationErrors = (row) => {
+    const errors = [];
+    const name = row['Name'] || row['name'] || '';
+    const email = row['Email'] || row['email'] || '';
+    const specialization = row['Specialization'] || row['specialization'] || '';
+
+    if (!name.trim()) errors.push("Name is required");
+    if (!email.includes('@')) errors.push("Valid email is required");
+    if (!specialization.trim()) errors.push("Specialization is required");
+
+    return errors;
+  };
+
+  // Process and submit all valid Excel data
+  const processExcelUpload = async () => {
+    if (excelData.length === 0) {
+      alert("❌ No valid data found in the Excel file.");
+      return;
+    }
+
+    const validCoaches = excelData.filter(coach => coach.isValid);
+    const invalidCoaches = excelData.filter(coach => !coach.isValid);
+
+    if (validCoaches.length === 0) {
+      alert("❌ No valid coaches found in the Excel file.");
+      return;
+    }
+
+    // Show confirmation with summary
+    const shouldProceed = window.confirm(
+      `Found ${validCoaches.length} valid coaches and ${invalidCoaches.length} invalid entries.\n\nDo you want to proceed with adding the valid coaches?`
+    );
+
+    if (!shouldProceed) return;
+
+    setIsProcessing(true);
+
+    try {
+      // Simulate API calls for each coach
+      for (const coach of validCoaches) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log("Adding coach from Excel:", coach);
+      }
+
+      alert(`✅ Successfully added ${validCoaches.length} coaches from Excel!`);
+      setExcelFile(null);
+      setExcelData([]);
+      navigate("/admin/coaches");
+    } catch (error) {
+      alert("❌ Failed to process Excel file. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Download template Excel file
+  const downloadTemplate = () => {
+    const templateData = [
+      {
+        'Name': 'Dr. Sarah Wilson',
+        'Email': 'sarah.wilson@example.com',
+        'Phone': '+1 (555) 123-4567',
+        'Specialization': 'Mathematics',
+        'Experience': '5',
+        'Qualification': 'M.Sc, B.Ed',
+        'Salary': '45000',
+        'Batches': 'Batch A - Mathematics, Batch C - Advanced Math'
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Coaches");
+    XLSX.writeFile(workbook, "coach_template.xlsx");
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
+            Add New Coach
+          </h1>
+          <p className="text-gray-600">Add coaching staff to the system</p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex bg-white rounded-lg p-1 shadow-sm mb-6">
+          <button
+            onClick={() => setActiveTab("single")}
+            className={`flex-1 py-2 px-4 rounded-md transition-colors ${
+              activeTab === "single"
+                ? "bg-purple-600 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            Single Registration
+          </button>
+          <button
+            onClick={() => setActiveTab("excel")}
+            className={`flex-1 py-2 px-4 rounded-md transition-colors ${
+              activeTab === "excel"
+                ? "bg-purple-600 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            Excel Upload ({excelData.length})
+          </button>
+        </div>
+
+        {/* Single Registration Form */}
+        {activeTab === "single" && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              
+              {/* Personal Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    {...register("name", { required: "Name is required" })}
+                    placeholder="Enter coach name"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  {errors.name && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {errors.name.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    {...register("email", { 
+                      required: "Email is required",
+                      pattern: {
+                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                        message: "Invalid email address"
+                      }
+                    })}
+                    placeholder="coach@example.com"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  {errors.email && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {errors.email.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    {...register("phone")}
+                    placeholder="+1 (555) 123-4567"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Qualification
+                  </label>
+                  <input
+                    type="text"
+                    {...register("qualification")}
+                    placeholder="e.g., M.Sc, B.Ed, PhD"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Specialization *
+                  </label>
+                  <select
+                    {...register("specialization", { required: "Specialization is required" })}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Select Specialization</option>
+                    {specializations.map((spec) => (
+                      <option key={spec} value={spec.toLowerCase()}>
+                        {spec}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.specialization && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {errors.specialization.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Experience (Years)
+                  </label>
+                  <input
+                    type="number"
+                    {...register("experience", { min: 0 })}
+                    placeholder="e.g., 5"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monthly Salary (₹)
+                </label>
+                <input
+                  type="number"
+                  {...register("salary", { min: 0 })}
+                  placeholder="Enter monthly salary"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Batch Assignment */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Assign Batches
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-gray-200 rounded-lg">
+                  {availableBatches.map((batch) => (
+                    <label key={batch} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedBatches.includes(batch)}
+                        onChange={() => toggleBatchSelection(batch)}
+                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                      />
+                      <span className="text-sm text-gray-700">{batch}</span>
+                    </label>
+                  ))}
+                </div>
+                {selectedBatches.length > 0 && (
+                  <p className="text-green-600 text-xs mt-2">
+                    {selectedBatches.length} batch(es) selected
+                  </p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-6">
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin/coaches")}
+                  className="w-full sm:flex-1 py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full sm:flex-1 py-3 px-4 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? "Creating..." : "Create Coach"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Excel Upload Section */}
+        {activeTab === "excel" && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+            <div className="text-center mb-6">
+              <div className="text-4xl mb-4">📊</div>
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">
+                Upload Excel File
+              </h2>
+              <p className="text-gray-600">
+                Upload an Excel file to add multiple coaches at once
+              </p>
+            </div>
+
+            {/* File Upload Area */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-6">
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleExcelUpload}
+                className="hidden"
+                id="excel-upload"
+                disabled={isProcessing}
+              />
+              <label
+                htmlFor="excel-upload"
+                className={`cursor-pointer px-6 py-3 rounded-lg transition-colors inline-block ${
+                  isProcessing 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-purple-600 hover:bg-purple-700 text-white'
+                }`}
+              >
+                {isProcessing ? "Processing..." : "Choose Excel File"}
+              </label>
+
+              {excelFile && (
+                <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                  <p className="text-green-700 font-medium">
+                    ✅ File Selected: {excelFile.name}
+                  </p>
+                  <p className="text-green-600 text-sm mt-1">
+                    Found {excelData.length} coaches
+                  </p>
+                </div>
+              )}
+
+              <p className="text-gray-500 text-sm mt-4">
+                Supported formats: .xlsx, .xls, .csv
+              </p>
+            </div>
+
+            {/* Data Preview */}
+            {excelData.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Data Preview ({excelData.length} coaches)
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="p-2 text-left">Name</th>
+                        <th className="p-2 text-left">Email</th>
+                        <th className="p-2 text-left">Specialization</th>
+                        <th className="p-2 text-left">Experience</th>
+                        <th className="p-2 text-left">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {excelData.slice(0, 5).map((coach, index) => (
+                        <tr key={index} className="border-b">
+                          <td className="p-2">{coach.name}</td>
+                          <td className="p-2">{coach.email}</td>
+                          <td className="p-2">{coach.specialization}</td>
+                          <td className="p-2">{coach.experience} yrs</td>
+                          <td className="p-2">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              coach.isValid 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {coach.isValid ? 'Valid' : 'Invalid'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {excelData.length > 5 && (
+                    <p className="text-gray-500 text-sm mt-2">
+                      ... and {excelData.length - 5} more coaches
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Template and Requirements */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-800 mb-2">
+                  Excel Format Requirements:
+                </h3>
+                <ul className="text-blue-700 text-sm space-y-1">
+                  <li>• Required: Name, Email, Specialization</li>
+                  <li>• Optional: Phone, Experience, Qualification, Salary, Batches</li>
+                  <li>• First row should contain column headers</li>
+                  <li>• Maximum 500 rows per upload</li>
+                </ul>
+              </div>
+
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800 mb-2">
+                  Download Template
+                </h3>
+                <p className="text-green-700 text-sm mb-3">
+                  Use our template to ensure proper formatting
+                </p>
+                <button
+                  onClick={downloadTemplate}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                >
+                  📥 Download Template
+                </button>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-6">
+              <button
+                onClick={() => setActiveTab("single")}
+                className="flex-1 py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Back to Single
+              </button>
+              <button
+                onClick={processExcelUpload}
+                disabled={!excelFile || excelData.length === 0 || isProcessing}
+                className="flex-1 py-3 px-4 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+              >
+                {isProcessing ? "Processing..." : `Add ${excelData.length} Coaches`}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default CreateCoach;

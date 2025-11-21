@@ -1,34 +1,22 @@
-// routes/admin/batch.js
-import express from "express";
+// routes/batchRoutes.js
+import express from 'express';
 import {
   createBatch,
   getBatches,
   getBatch,
   updateBatch,
   deleteBatch,
-  assignCoach,
-  updateStatus,
-  getBatchesByDay,
-  getBatchStats
-} from "../../controllers/batchController.js";
-import { authenticate } from "../../middlewares/auth.js";
+  assignCoach
+} from '../../controllers/admin/batches.controller.js';
+import { authenticateAdmin } from '../../middleware/auth.admin.js';
 
-const router = express.Router();
+const BatchRouter = express.Router();
 
-// All routes require authentication
-router.use(authenticate);
+BatchRouter.post('/register/batch', authenticateAdmin, createBatch);
+BatchRouter.get('/fetch/batch', authenticateAdmin, getBatches);
+BatchRouter.get('/batch-fetch/:id', authenticateAdmin, getBatch);
+BatchRouter.put('/update/batch/:id', authenticateAdmin, updateBatch);
+BatchRouter.delete('/delete/batch/:id', authenticateAdmin, deleteBatch);
+BatchRouter.patch('/batch/assign/:id/assign-coach', authenticateAdmin, assignCoach);
 
-// Batch CRUD routes
-router.post("/", createBatch);
-router.get("/", getBatches);
-router.get("/stats", getBatchStats);
-router.get("/day/:day", getBatchesByDay);
-router.get("/:id", getBatch);
-router.put("/:id", updateBatch);
-router.delete("/:id", deleteBatch);
-
-// Batch operations
-router.patch("/:id/assign-coach", assignCoach);
-router.patch("/:id/status", updateStatus);
-
-export default router;
+export default BatchRouter;

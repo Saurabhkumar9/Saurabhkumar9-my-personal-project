@@ -1,14 +1,14 @@
 // index.js
 import dotenv from "dotenv";
 import cron from "node-cron";
-import app from "./app.js";
-import databaseConnection from "./src/config/db.js";
-import checkFee from "./src/job/fee.reminder.js";
+import app from "./src/app.js";
+import connectDB from "./src/config/db.js";
+// import checkFee from "./src/job/fee.reminder.js";
 
 dotenv.config();
 
 // Database Connection
-databaseConnection();
+connectDB();
 
 // Cron Job (Optional)
 // cron.schedule("* * * * *", () => {

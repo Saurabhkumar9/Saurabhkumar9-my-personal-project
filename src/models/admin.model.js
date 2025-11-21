@@ -93,10 +93,7 @@ adminSchema.methods.addSession = function(deviceInfo, deviceId){
   }
 };
 
-// Logout from specific device
-adminSchema.methods.logoutDevice = function(deviceId){
-  this.deviceSessions = this.deviceSessions.filter(session => session.deviceId !== deviceId);
-};
+
 
 // Logout from all devices
 adminSchema.methods.logoutAllDevices = function(){
@@ -104,4 +101,11 @@ adminSchema.methods.logoutAllDevices = function(){
   this.tokenVersion += 1;
 };
 
-export default mongoose.model("Admin", adminSchema);
+const Admin= mongoose.model("Admin", adminSchema);
+
+export default Admin
+
+
+
+
+

@@ -1,23 +1,14 @@
-import express from 'express';
-import {
-  markAttendance,
-  bulkMarkAttendance,
-  unmarkAttendance,
-  getAttendanceReport,
-  getTodaysAttendance
-} from '../controllers/attendance.controller.js';
-import { authenticate, updateActivity } from '../middleware/auth.js';
+// In your routes file (admin.routes.js)
+import express from "express";
+import { attendanceMarked, attendanceUnMarked } from "../../controllers/coachController/attendance.controller.js";
 
-const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate, updateActivity);
+const AttendanceRouter = express.Router();
 
-// Attendance operations
-router.post('/mark', markAttendance);
-router.post('/bulk-mark', bulkMarkAttendance);
-router.post('/unmark', unmarkAttendance);
-router.get('/report', getAttendanceReport);
-router.get('/today', getTodaysAttendance);
+// Coach routes
 
-export default router;
+AttendanceRouter.post('/marked/attendance', attendanceMarked)
+AttendanceRouter.post('/unmarked/attendance', attendanceUnMarked)
+
+
+export default AttendanceRouter;

@@ -1,34 +1,89 @@
-// controllers/coachController.js
-import Coach from "../models/Coach.js";
-import Batch from "../models/Batch.js";
+import Coach from "../../models/coach.model.js";
+import Batch from "../../models/batches.model.js";
+import handleErrors from "../../middleware/handleErrors.js";
 
-/**
- * Create Coach
- */
-export const createCoach = async (req, res) => {
+
+
+
+// Create coach with batch assignment
+export const createCoach = async (req, res, next) => {
   try {
-    const { name, email, phone, specialization, experience } = req.body;
+    const { name, email, phone, batches } = req.body;
     const adminId = req.admin.id;
 
-    // Basic validation
-    if (!name || !email || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Name, email and phone are required"
-      });
+    // Validation
+    if (!name?.trim() || !email?.trim() || !phone?.trim()) {
+      return next(handleErrors(400, "Name, email and phone are required"));
     }
 
-    // Check if coach already exists
+    // Check if coach with email already exists
     const existingCoach = await Coach.findOne({ 
-      email: email.toLowerCase(), 
+      email: email.toLowerCase().trim(), 
       adminId 
     });
     
     if (existingCoach) {
-      return res.status(400).json({
-        success: false,
-        message: "Coach with this email already exists"
+      return next(handleErrors(400, "Coach with this email already exists"));
+    }
+
+    // Validate batches if provided
+    if (batches && batches.length > 0) {
+      // Get all batches that belong to this admin
+      const adminBatches = await Batch.find({ adminId });
+      
+      // Check if all provided batches exist and belong to admin
+      const validBatchIds = adminBatches.map(batch => batch._id.toString());
+      const invalidBatches = batches.filter(batchId => !validBatchIds.includes(batchId));
+      
+      if (invalidBatches.length > 0) {
+        return next(handleErrors(400, "One or more batches are invalid"));
+      }
+
+      // Check for already assigned batches
+      const assignedBatches = adminBatches.filter(batch => 
+        batch.coachId && batches.includes(batch._id.toString())
+      );
+
+      if (assignedBatches.length > 0) {
+        const assignedBatchNames = assignedBatches.map(batch => 
+          `${batch.batchName}`
+        ).join(', ');
+        
+        return next(handleErrors(400, 
+          `Cannot assign batches that are already assigned to other coaches: ${assignedBatchNames}`
+        ));
+      }
+
+      // Check for timing conflicts
+      const selectedBatches = adminBatches.filter(batch => 
+        batches.includes(batch._id.toString())
+      );
+
+      const timingMap = {};
+      const conflictingBatches = [];
+
+      selectedBatches.forEach(batch => {
+        if (batch.timing && batch.timing !== "Not Assigned") {
+          if (timingMap[batch.timing]) {
+            conflictingBatches.push({
+              batchName: batch.batchName,
+              timing: batch.timing
+            });
+          } else {
+            timingMap[batch.timing] = batch.batchName;
+          }
+        }
       });
+
+      if (conflictingBatches.length > 0) {
+        const conflictDetails = conflictingBatches.map(conflict => 
+          `${conflict.batchName} (${conflict.timing})`
+        ).join(', ');
+        
+        return next(handleErrors(400, 
+          `Timing conflicts: ${conflictDetails}. Coach cannot handle multiple batches at same time.`
+        ));
+      }
     }
 
     // Create coach
@@ -36,311 +91,404 @@ export const createCoach = async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       phone: phone.trim(),
-      specialization: specialization?.trim() || "General",
-      experience: experience || 0,
-      adminId
+      assignedBatches: batches || [],
+      adminId,
+      status: 'active'
     });
 
     await coach.save();
+
+    // Update batch assignments
+    if (batches && batches.length > 0) {
+      await Batch.updateMany(
+        { _id: { $in: batches } },
+        { 
+          coachId: coach._id,
+          coachName: coach.name
+        }
+      );
+    }
+
+    // Populate response
+    const populatedCoach = await Coach.findById(coach._id)
+      .populate('assignedBatches', 'batchName timing fee status weekDays');
 
     res.status(201).json({
       success: true,
       message: "Coach created successfully",
-      coach
+      coach: populatedCoach
     });
-
-  } catch (error) {
-    console.error("Create coach error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to create coach"
-    });
+  } catch (err) {
+    next(err);
   }
 };
 
-/**
- * Get All Coaches
- */
-export const getCoaches = async (req, res) => {
+// Get available batches for assignment (only unassigned batches)
+export const getAvailableBatches = async (req, res, next) => {
   try {
     const adminId = req.admin.id;
-    const { page = 1, limit = 10, status, search } = req.query;
+    const { coachId } = req.query;
 
-    // Build query
-    const query = { adminId };
-    if (status) query.status = status;
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
-    }
+    // Find all batches that belong to admin and are either unassigned or assigned to this specific coach
+    const batches = await Batch.find({ 
+      adminId,
+      status: 'active'
+    })
+    .select('batchName timing fee status weekDays coachId coachName')
+    .sort({ batchName: 1 });
 
-    // Pagination
-    const skip = (page - 1) * limit;
+    // Filter: show only unassigned batches OR batches already assigned to this coach
+    const availableBatches = batches.filter(batch => 
+      !batch.coachId || (coachId && batch.coachId.toString() === coachId)
+    );
 
-    const coaches = await Coach.find(query)
-      .select("-otp -tokenVersion")
-      .populate("assignedBatches", "batchName timing")
-      .skip(skip)
-      .limit(parseInt(limit))
+    res.status(200).json({
+      success: true,
+      batches: availableBatches,
+      totalBatches: availableBatches.length
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Other functions remain the same as your original implementation...
+// getCoachesOfAdmin, assignBatchesToCoach, unassignBatchFromCoach, etc.
+
+
+// Get all coaches for admin
+export const getCoachesOfAdmin = async (req, res, next) => {
+  try {
+    const adminId = req.admin.id;
+
+    const coaches = await Coach.find({ adminId })
+      .populate('assignedBatches', 'batchName timing fee status weekDays')
       .sort({ createdAt: -1 });
 
-    const total = await Coach.countDocuments(query);
-
-    res.json({
+    res.status(200).json({
       success: true,
-      coaches,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
+      coaches: coaches.map(coach => ({
+        _id: coach._id,
+        name: coach.name,
+        email: coach.email,
+        phone: coach.phone,
+        status: coach.status,
+        assignedBatches: coach.assignedBatches,
+        batchCount: coach.assignedBatches.length,
+        createdAt: coach.createdAt
+      })),
+      totalCoaches: coaches.length
     });
-
-  } catch (error) {
-    console.error("Get coaches error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch coaches"
-    });
+  } catch (err) {
+    next(err);
   }
 };
 
-/**
- * Get Single Coach
- */
-export const getCoach = async (req, res) => {
+// Get available batches for assignment (only unassigned batches)
+
+
+// Assign batches to coach with enhanced validation
+export const assignBatchesToCoach = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const adminId = req.admin.id;
-
-    const coach = await Coach.findOne({ _id: id, adminId })
-      .select("-otp -tokenVersion")
-      .populate("assignedBatches", "batchName timing fee currentStrength");
-
-    if (!coach) {
-      return res.status(404).json({
-        success: false,
-        message: "Coach not found"
-      });
-    }
-
-    res.json({
-      success: true,
-      coach
-    });
-
-  } catch (error) {
-    console.error("Get coach error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch coach"
-    });
-  }
-};
-
-/**
- * Update Coach
- */
-export const updateCoach = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, phone, specialization, experience, status } = req.body;
-    const adminId = req.admin.id;
-
-    const coach = await Coach.findOne({ _id: id, adminId });
-    if (!coach) {
-      return res.status(404).json({
-        success: false,
-        message: "Coach not found"
-      });
-    }
-
-    // Update fields
-    if (name) coach.name = name.trim();
-    if (phone) coach.phone = phone.trim();
-    if (specialization) coach.specialization = specialization.trim();
-    if (experience) coach.experience = experience;
-    if (status) coach.status = status;
-
-    await coach.save();
-
-    const updatedCoach = await Coach.findById(id)
-      .select("-otp -tokenVersion")
-      .populate("assignedBatches", "batchName timing");
-
-    res.json({
-      success: true,
-      message: "Coach updated successfully",
-      coach: updatedCoach
-    });
-
-  } catch (error) {
-    console.error("Update coach error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to update coach"
-    });
-  }
-};
-
-/**
- * Delete Coach
- */
-export const deleteCoach = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const adminId = req.admin.id;
-
-    const coach = await Coach.findOne({ _id: id, adminId });
-    if (!coach) {
-      return res.status(404).json({
-        success: false,
-        message: "Coach not found"
-      });
-    }
-
-    // Check if coach has assigned batches
-    if (coach.assignedBatches.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot delete coach with assigned batches"
-      });
-    }
-
-    await Coach.findByIdAndDelete(id);
-
-    res.json({
-      success: true,
-      message: "Coach deleted successfully"
-    });
-
-  } catch (error) {
-    console.error("Delete coach error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to delete coach"
-    });
-  }
-};
-
-/**
- * Assign Batches to Coach
- */
-export const assignBatches = async (req, res) => {
-  try {
-    const { id } = req.params;
+    const coachId = req.params.id;
     const { batchIds } = req.body;
     const adminId = req.admin.id;
 
     if (!batchIds || !Array.isArray(batchIds)) {
-      return res.status(400).json({
-        success: false,
-        message: "Batch IDs array is required"
-      });
+      return next(handleErrors(400, "Batch IDs array is required"));
     }
 
-    const coach = await Coach.findOne({ _id: id, adminId });
+    // Get coach
+    const coach = await Coach.findOne({ _id: coachId, adminId });
     if (!coach) {
-      return res.status(404).json({
-        success: false,
-        message: "Coach not found"
-      });
+      return next(handleErrors(404, "Coach not found"));
     }
 
-    // Check if batches exist and belong to admin
-    const batches = await Batch.find({ 
+    // Validate batches
+    const validBatches = await Batch.find({ 
       _id: { $in: batchIds }, 
       adminId 
     });
-
-    if (batches.length !== batchIds.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Some batches not found"
-      });
+    
+    if (validBatches.length !== batchIds.length) {
+      return next(handleErrors(400, "One or more batches are invalid"));
     }
 
-    // Check if batches are already assigned to other coaches
-    const alreadyAssigned = await Coach.findOne({
-      adminId,
-      _id: { $ne: id },
-      assignedBatches: { $in: batchIds }
+    // Check for batches already assigned to other coaches
+    const alreadyAssignedBatches = validBatches.filter(batch => 
+      batch.coachId && batch.coachId.toString() !== coachId
+    );
+
+    if (alreadyAssignedBatches.length > 0) {
+      const assignedBatchNames = alreadyAssignedBatches.map(batch => 
+        `${batch.batchName} (currently assigned to ${batch.coachName || 'another coach'})`
+      ).join(', ');
+      
+      return next(handleErrors(400, 
+        `Cannot assign batches that are already assigned to other coaches: ${assignedBatchNames}. ` +
+        `Please unassign them from their current coach first.`
+      ));
+    }
+
+    // Check for timing conflicts
+    const timingMap = {};
+    const conflictingBatches = [];
+
+    validBatches.forEach(batch => {
+      if (batch.timing && batch.timing !== "Not Assigned") {
+        if (timingMap[batch.timing]) {
+          conflictingBatches.push({
+            batchName: batch.batchName,
+            timing: batch.timing
+          });
+        } else {
+          timingMap[batch.timing] = batch.batchName;
+        }
+      }
     });
 
-    if (alreadyAssigned) {
-      return res.status(400).json({
-        success: false,
-        message: "Some batches are already assigned to another coach"
-      });
+    if (conflictingBatches.length > 0) {
+      const conflictDetails = conflictingBatches.map(conflict => 
+        `${conflict.batchName} (${conflict.timing})`
+      ).join(', ');
+      
+      return next(handleErrors(400, 
+        `Timing conflicts detected: ${conflictDetails}. ` +
+        `A coach cannot be assigned multiple batches at the same time.`
+      ));
     }
 
-    // Assign batches
+    // Remove coach from previous batches (only if they're assigned to this coach)
+    await Batch.updateMany(
+      { coachId: coachId },
+      { 
+        $unset: { coachId: "", coachName: "" }
+      }
+    );
+
+    // Assign new batches
     coach.assignedBatches = batchIds;
     await coach.save();
 
-    const updatedCoach = await Coach.findById(id)
-      .populate("assignedBatches", "batchName timing");
+    // Update batches with coach info
+    await Batch.updateMany(
+      { _id: { $in: batchIds } },
+      { 
+        coachId: coach._id,
+        coachName: coach.name
+      }
+    );
 
-    res.json({
+    await coach.populate('assignedBatches', 'batchName timing fee status weekDays');
+
+    res.status(200).json({
       success: true,
       message: "Batches assigned successfully",
-      coach: updatedCoach
+      coach: {
+        _id: coach._id,
+        name: coach.name,
+        assignedBatches: coach.assignedBatches,
+        batchCount: coach.assignedBatches.length
+      },
     });
-
-  } catch (error) {
-    console.error("Assign batches error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to assign batches"
-    });
+  } catch (err) {
+    next(err);
   }
 };
 
-/**
- * Update Coach Status
- */
-export const updateStatus = async (req, res) => {
+// Unassign batch from coach
+export const unassignBatchFromCoach = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { coachId, batchId } = req.params;
+    const adminId = req.admin.id;
+
+    // Verify coach exists and belongs to admin
+    const coach = await Coach.findOne({ _id: coachId, adminId });
+    if (!coach) {
+      return next(handleErrors(404, "Coach not found"));
+    }
+
+    // Verify batch exists and belongs to admin
+    const batch = await Batch.findOne({ _id: batchId, adminId });
+    if (!batch) {
+      return next(handleErrors(404, "Batch not found"));
+    }
+
+    // Verify batch is assigned to this coach
+    if (batch.coachId?.toString() !== coachId) {
+      return next(handleErrors(400, "Batch is not assigned to this coach"));
+    }
+
+    // Remove batch from coach's assigned batches
+    coach.assignedBatches = coach.assignedBatches.filter(
+      batch => batch.toString() !== batchId
+    );
+    await coach.save();
+
+    // Remove coach from batch
+    batch.coachId = null;
+    batch.coachName = null;
+    await batch.save();
+
+    await coach.populate('assignedBatches', 'batchName timing fee status weekDays');
+
+    res.status(200).json({
+      success: true,
+      message: "Batch unassigned successfully",
+      coach: {
+        _id: coach._id,
+        name: coach.name,
+        assignedBatches: coach.assignedBatches,
+        batchCount: coach.assignedBatches.length
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get batches assigned to specific coach
+export const getCoachBatches = async (req, res, next) => {
+  try {
+    const coachId = req.params.id;
+    const adminId = req.admin.id;
+
+    const coach = await Coach.findOne({ _id: coachId, adminId })
+      .populate('assignedBatches', 'batchName timing fee status weekDays');
+
+    if (!coach) {
+      return next(handleErrors(404, "Coach not found"));
+    }
+
+    res.status(200).json({
+      success: true,
+      batches: coach.assignedBatches,
+      totalBatches: coach.assignedBatches.length,
+      coach: {
+        _id: coach._id,
+        name: coach.name,
+        email: coach.email
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Update coach status
+export const updateCoachStatus = async (req, res, next) => {
+  try {
+    const coachId = req.params.id;
     const { status } = req.body;
     const adminId = req.admin.id;
 
     if (!['active', 'inactive'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be active or inactive"
-      });
+      return next(handleErrors(400, "Status must be either 'active' or 'inactive'"));
     }
 
-    const coach = await Coach.findOne({ _id: id, adminId });
+    const coach = await Coach.findOne({ _id: coachId, adminId });
     if (!coach) {
-      return res.status(404).json({
-        success: false,
-        message: "Coach not found"
-      });
+      return next(handleErrors(404, "Coach not found"));
+    }
+
+    // If deactivating coach, remove all batch assignments
+    if (status === 'inactive') {
+      // Remove coach from all assigned batches
+      await Batch.updateMany(
+        { coachId: coachId },
+        { 
+          $unset: { coachId: "", coachName: "" }
+        }
+      );
+
+      // Clear assigned batches array from coach
+      coach.assignedBatches = [];
     }
 
     coach.status = status;
     await coach.save();
 
-    res.json({
-      success: true,
-      message: `Coach status updated to ${status}`,
-      coach: {
-        id: coach._id,
-        name: coach.name,
-        status: coach.status
-      }
-    });
+    // Populate coach data for response
+    const updatedCoach = await Coach.findById(coachId)
+      .populate('assignedBatches', 'batchName timing fee status weekDays');
 
-  } catch (error) {
-    console.error("Update status error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to update status"
+    res.status(200).json({
+      success: true,
+      message: `Coach ${status} successfully`,
+      coach: {
+        _id: updatedCoach._id,
+        name: updatedCoach.name,
+        status: updatedCoach.status,
+        assignedBatches: updatedCoach.assignedBatches,
+        batchCount: updatedCoach.assignedBatches.length
+      },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Delete coach
+export const deleteCoach = async (req, res, next) => {
+  try {
+    const coachId = req.params.id;
+    const adminId = req.admin.id;
+
+   
+
+    const coach = await Coach.findOne({ _id: coachId, adminId });
+    if (!coach) {
+      return next(handleErrors(404, "Coach not found"));
+    }
+
+    // Remove coach from all assigned batches
+    await Batch.updateMany(
+      { coachId: coachId },
+      { 
+        $unset: { coachId: "", coachName: "" }
+      }
+    );
+
+   
+
+    await Coach.findByIdAndDelete(coachId);
+
+    res.status(200).json({
+      success: true,
+      message: "Coach deleted successfully",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get single coach
+export const getCoachById = async (req, res, next) => {
+  try {
+    const coachId = req.params.id;
+    const adminId = req.admin.id;
+
+    const coach = await Coach.findOne({ _id: coachId, adminId })
+      .populate('assignedBatches', 'batchName timing fee status weekDays');
+
+    if (!coach) {
+      return next(handleErrors(404, "Coach not found"));
+    }
+
+    res.status(200).json({
+      success: true,
+      coach: {
+        _id: coach._id,
+        name: coach.name,
+        email: coach.email,
+        phone: coach.phone,
+        status: coach.status,
+        assignedBatches: coach.assignedBatches,
+        batchCount: coach.assignedBatches.length,
+        createdAt: coach.createdAt
+      },
+    });
+  } catch (err) {
+    next(err);
   }
 };

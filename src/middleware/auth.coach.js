@@ -1,66 +1,35 @@
 // middlewares/coachAuth.js
 import jwt from "jsonwebtoken";
-import Coach from "../models/Coach.js";
+import Coach from "../models/coach.model.js";
 
-export const coachAuth = async (req, res, next) => {
+export const authenticateCoach = async (req, res, next) => {
   try {
-    const token = req.header("Authorization")?.replace("Bearer ", "");
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Access denied"
-      });
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next(
+        handleErrors(401, "Unauthorized: No token provided. Please login.")
+      );
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const deviceId = generateDeviceId(req);
+    const token = authHeader.split(" ")[1];
+    const secretKey = process.env.JWT_SECRET;
 
-    const coach = await Coach.findById(decoded.id);
-    if (!coach || !coach.isVerify || coach.status !== "active") {
-      return res.status(401).json({
-        success: false,
-        message: "Coach not found or inactive"
-      });
+    if (!secretKey) {
+      return next(handleErrors(500, "Internal server error: Secret key missing."));
     }
 
-    // Check token version
-    if (decoded.tokenVersion !== coach.tokenVersion) {
-      return res.status(401).json({
-        success: false,
-        message: "Session expired"
-      });
-    }
+    const decoded = jwt.verify(token, secretKey);
 
-    // Check device session
-    const session = coach.deviceSessions.find(s => s.deviceId === deviceId);
-    if (!session) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid device session"
-      });
+    const coach = await Coach.findById(decoded.id).select("-password"); 
+    if (!coach) {
+      return next(handleErrors(404, "Admin not found. Please register."));
     }
-
-    // Update activity
-    coach.updateSessionActivity(deviceId);
-    await coach.save();
 
     req.coach = coach;
-    req.deviceId = deviceId;
     next();
-
   } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: "Invalid token"
-    });
+    console.error("Auth Middleware Error:", error);
+    return next(handleErrors(401, "Invalid or Expired Token. Please login again."));
   }
-};
-
-// Helper function
-const generateDeviceId = (req) => {
-  const crypto = require("crypto");
-  const ip = req.ip || "0.0.0.0";
-  const userAgent = req.headers["user-agent"] || "unknown";
-  return crypto.createHash("md5").update(ip + userAgent).digest("hex");
 };

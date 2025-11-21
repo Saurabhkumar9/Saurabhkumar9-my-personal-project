@@ -1,339 +1,193 @@
-// controllers/studentExcelController.js
-import Student from "../models/Student.js";
-import Batch from "../models/Batch.js";
-import Coach from "../models/Coach.js";
+import mongoose from "mongoose";
+import Batch from "../../models/batches.model.js";
+import Student from "../../models/student.model.js";
+import Coach from '../../models/coach.model.js'
 
-/**
- * Validate Student Data from Excel
- */
-const validateStudentData = (student) => {
-  const errors = [];
-  
-  if (!student.name?.trim()) errors.push("Name is required");
-  if (!student.fatherName?.trim()) errors.push("Father name is required");
-  if (!student.phone?.trim()) errors.push("Phone is required");
-  if (!/^[6-9]\d{9}$/.test(student.phone)) errors.push("Invalid phone number");
-  if (!student.aadharNumber?.trim()) errors.push("Aadhar number is required");
-  if (!/^\d{12}$/.test(student.aadharNumber)) errors.push("Aadhar must be 12 digits");
-  
-  return errors;
-};
-
-/**
- * Process Student Data
- */
-const processStudentData = (student) => {
-  return {
-    name: student.name.toString().trim(),
-    fatherName: student.fatherName.toString().trim(),
-    motherName: student.motherName?.toString().trim() || "",
-    phone: student.phone.toString().trim(),
-    aadharNumber: student.aadharNumber.toString().trim(),
-    schoolName: student.schoolName?.toString().trim() || "",
-    address: student.address?.toString().trim() || "",
-  };
-};
-
-/**
- * Excel Upload by Admin
- */
-export const excelUploadByAdmin = async (req, res) => {
+export const excelUploadStudentsByAdmin = async (req, res) => {
   try {
-    const { students } = req.body;
+    const { array: studentsArray } = req.body;
     const { batchId } = req.params;
-    const adminId = req.admin.id;
+    const adminId = req.admin?.id;
 
-    if (!students || !Array.isArray(students)) {
-      return res.status(400).json({
-        success: false,
-        message: "Students array is required"
-      });
+
+    if (!adminId) {
+      return res.status(401).json({ success: false, message: "Admin authentication required." });
     }
 
-    if (students.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: "Maximum 100 students allowed per upload"
-      });
+    if (!studentsArray || !Array.isArray(studentsArray) || studentsArray.length === 0) {
+      return res.status(400).json({ success: false, message: "No student data provided" });
     }
 
-    // Check batch
-    const batch = await Batch.findOne({ _id: batchId, adminId });
+    if (!mongoose.Types.ObjectId.isValid(batchId)) {
+      return res.status(400).json({ success: false, message: "Invalid batch ID" });
+    }
+
+    const batch = await Batch.findById(batchId);
     if (!batch) {
-      return res.status(404).json({
-        success: false,
-        message: "Batch not found"
-      });
+      return res.status(404).json({ success: false, message: "Batch not found" });
     }
 
-    // Check capacity
-    if (batch.currentStrength + students.length > batch.capacity) {
-      return res.status(400).json({
-        success: false,
-        message: `Batch capacity exceeded. Only ${batch.capacity - batch.currentStrength} seats available`
-      });
-    }
-
+    const requiredFields = ["name", "fatherName", "phone", "aadharNumber"];
     const insertedStudents = [];
     const skippedStudents = [];
 
-    // Process each student
-    for (const [index, studentData] of students.entries()) {
-      try {
-        // Validate data
-        const errors = validateStudentData(studentData);
-        if (errors.length > 0) {
-          skippedStudents.push({
-            row: index + 1,
-            name: studentData.name || "Unknown",
-            reason: errors.join(", ")
-          });
-          continue;
+    for (const studentData of studentsArray) {
+      // Validate required fields
+      let isValid = true;
+      for (const field of requiredFields) {
+        if (!studentData[field]?.toString().trim()) {
+          isValid = false;
+          break;
         }
-
-        const processedData = processStudentData(studentData);
-
-        // Check duplicates
-        const existingStudent = await Student.findOne({
-          $or: [
-            { phone: processedData.phone, adminId },
-            { aadharNumber: processedData.aadharNumber, adminId }
-          ]
-        });
-
-        if (existingStudent) {
-          skippedStudents.push({
-            row: index + 1,
-            name: processedData.name,
-            reason: "Student with same phone or Aadhar already exists"
-          });
-          continue;
-        }
-
-        // Create student
-        const student = new Student({
-          ...processedData,
-          batchName: batch.batchName,
-          batchId: batch._id,
-          coachId: batch.coachId,
-          adminId,
-          createdBy: req.admin.name
-        });
-
-        await student.save();
-        insertedStudents.push({
-          name: student.name,
-          phone: student.phone
-        });
-
-      } catch (error) {
-        skippedStudents.push({
-          row: index + 1,
-          name: studentData.name || "Unknown",
-          reason: error.message
-        });
       }
-    }
+      if (!isValid) {
+        skippedStudents.push({ ...studentData, reason: "Missing required field" });
+        continue;
+      }
 
-    // Update batch strength
-    if (insertedStudents.length > 0) {
-      await Batch.findByIdAndUpdate(batchId, {
-        $inc: { currentStrength: insertedStudents.length }
+      // Check if student already exists in the same batch
+      const exists = await Student.findOne({
+        aadharNumber: studentData.aadharNumber.toString().trim(),
+        batchId: batchId,
+        adminId: adminId,
       });
+
+      if (exists) {
+        skippedStudents.push({ ...studentData, reason: "Duplicate student in batch" });
+        continue;
+      }
+
+      // Create new student
+      const newStudent = new Student({
+        name: studentData.name.toString().trim(),
+        fatherName: studentData.fatherName.toString().trim(),
+        motherName: studentData.motherName?.toString().trim() || "",
+        phone: studentData.phone.toString().trim(),
+        aadharNumber: studentData.aadharNumber.toString().trim(),
+        schoolName: studentData.schoolName?.toString().trim() || "",
+        batchName: batch.batchName,
+        adminId,
+        batchId,
+      });
+
+      const saved = await newStudent.save();
+      insertedStudents.push(saved);
     }
 
-    res.json({
+    return res.status(201).json({
       success: true,
-      message: "Excel upload completed",
-      summary: {
-        total: students.length,
-        inserted: insertedStudents.length,
-        skipped: skippedStudents.length
-      },
-      insertedStudents: insertedStudents.slice(0, 5),
-      skippedStudents: skippedStudents.slice(0, 10)
+      message: "Bulk upload completed",
+      insertedCount: insertedStudents.length,
+      skippedCount: skippedStudents.length,
+      skippedStudents,
+      insertedStudents,
     });
-
   } catch (error) {
-    console.error("Excel upload error:", error);
-    res.status(500).json({
+    console.error("Bulk upload error:", error);
+    return res.status(500).json({
       success: false,
-      message: "Failed to upload students"
+      message: "Internal server error during bulk upload",
+      error: process.env.NODE_ENV === "development" ? error.message : "Something went wrong",
     });
   }
 };
 
-/**
- * Excel Upload by Coach
- */
-export const excelUploadByCoach = async (req, res) => {
+export const excelUploadStudentsByCoach = async (req, res) => {
   try {
-    const { students } = req.body;
+    const { array: studentsArray } = req.body;
     const { batchId } = req.params;
-    const coachId = req.coach.id;
+    const coachId = req.coach?.id;
 
-    if (!students || !Array.isArray(students)) {
-      return res.status(400).json({
-        success: false,
-        message: "Students array is required"
-      });
+   
+
+
+    if (!coachId) {
+      return res.status(401).json({ success: false, message: "Coach authentication required." });
     }
 
-    // Get coach details
-    const coach = await Coach.findById(coachId);
-    if (!coach) {
-      return res.status(404).json({
-        success: false,
-        message: "Coach not found"
-      });
+    if (!studentsArray || !Array.isArray(studentsArray) || studentsArray.length === 0) {
+      return res.status(400).json({ success: false, message: "No student data provided" });
     }
 
-    // Check batch assignment
-    const batch = await Batch.findOne({ 
-      _id: batchId, 
-      coachId: coachId 
-    });
+    if (!mongoose.Types.ObjectId.isValid(batchId)) {
+      return res.status(400).json({ success: false, message: "Invalid batch ID" });
+    }
 
+    const batch = await Batch.findById(batchId);
     if (!batch) {
-      return res.status(404).json({
-        success: false,
-        message: "Batch not found or not assigned to you"
-      });
+      return res.status(404).json({ success: false, message: "Batch not found" });
     }
 
-    // Check capacity
-    if (batch.currentStrength + students.length > batch.capacity) {
-      return res.status(400).json({
-        success: false,
-        message: `Batch capacity exceeded. Only ${batch.capacity - batch.currentStrength} seats available`
-      });
-    }
-
+    const requiredFields = ["name", "fatherName", "phone", "aadharNumber"];
     const insertedStudents = [];
     const skippedStudents = [];
 
-    // Process each student
-    for (const [index, studentData] of students.entries()) {
-      try {
-        // Validate data
-        const errors = validateStudentData(studentData);
-        if (errors.length > 0) {
-          skippedStudents.push({
-            row: index + 1,
-            name: studentData.name || "Unknown",
-            reason: errors.join(", ")
-          });
-          continue;
+
+     const currentCoach=await Coach.findOne({_id:coachId})
+
+    
+
+    for (const studentData of studentsArray) {
+      // Validate required fields
+      let isValid = true;
+      for (const field of requiredFields) {
+        if (!studentData[field]?.toString().trim()) {
+          isValid = false;
+          break;
         }
-
-        const processedData = processStudentData(studentData);
-
-        // Check duplicates
-        const existingStudent = await Student.findOne({
-          $or: [
-            { phone: processedData.phone, adminId: coach.adminId },
-            { aadharNumber: processedData.aadharNumber, adminId: coach.adminId }
-          ]
-        });
-
-        if (existingStudent) {
-          skippedStudents.push({
-            row: index + 1,
-            name: processedData.name,
-            reason: "Student with same phone or Aadhar already exists"
-          });
-          continue;
-        }
-
-        // Create student
-        const student = new Student({
-          ...processedData,
-          batchName: batch.batchName,
-          batchId: batch._id,
-          coachId: coachId,
-          adminId: coach.adminId,
-          createdBy: coach.name
-        });
-
-        await student.save();
-        insertedStudents.push({
-          name: student.name,
-          phone: student.phone
-        });
-
-      } catch (error) {
-        skippedStudents.push({
-          row: index + 1,
-          name: studentData.name || "Unknown",
-          reason: error.message
-        });
       }
-    }
+      if (!isValid) {
+        skippedStudents.push({ ...studentData, reason: "Missing required field" });
+        continue;
+      }
 
-    // Update batch strength
-    if (insertedStudents.length > 0) {
-      await Batch.findByIdAndUpdate(batchId, {
-        $inc: { currentStrength: insertedStudents.length }
+     
+      // Check if student already exists in the same batch
+      const exists = await Student.findOne({
+        aadharNumber: studentData.aadharNumber.toString().trim(),
+        batchId: batchId,
+        adminId: currentCoach.adminId,
       });
+
+      if (exists) {
+        skippedStudents.push({ ...studentData, reason: "Duplicate student in batch" });
+        continue;
+      }
+
+
+      
+
+      // Create new student
+      const newStudent = new Student({
+        name: studentData.name.toString().trim(),
+        fatherName: studentData.fatherName.toString().trim(),
+        motherName: studentData.motherName?.toString().trim() || "",
+        phone: studentData.phone.toString().trim(),
+        aadharNumber: studentData.aadharNumber.toString().trim(),
+        schoolName: studentData.schoolName?.toString().trim() || "",
+        batchName: batch.batchName,
+        adminId:currentCoach.adminId,
+        batchId,
+      });
+
+      const saved = await newStudent.save();
+      insertedStudents.push(saved);
     }
 
-    res.json({
+    return res.status(201).json({
       success: true,
-      message: "Excel upload completed",
-      summary: {
-        total: students.length,
-        inserted: insertedStudents.length,
-        skipped: skippedStudents.length
-      },
-      insertedStudents: insertedStudents.slice(0, 5),
-      skippedStudents: skippedStudents.slice(0, 10)
+      message: "Bulk upload completed",
+      insertedCount: insertedStudents.length,
+      skippedCount: skippedStudents.length,
+      skippedStudents,
+      insertedStudents,
     });
-
   } catch (error) {
-    console.error("Coach excel upload error:", error);
-    res.status(500).json({
+    console.error("Bulk upload error:", error);
+    return res.status(500).json({
       success: false,
-      message: "Failed to upload students"
-    });
-  }
-};
-
-/**
- * Get Upload Template
- */
-export const getUploadTemplate = async (req, res) => {
-  try {
-    const template = {
-      requiredFields: ["name", "fatherName", "phone", "aadharNumber"],
-      optionalFields: ["motherName", "schoolName", "address"],
-      sample: [
-        {
-          name: "Rahul Sharma",
-          fatherName: "Rajesh Sharma", 
-          motherName: "Priya Sharma",
-          phone: "9876543210",
-          aadharNumber: "123456789012",
-          schoolName: "Delhi Public School",
-          address: "123 Main Street, Delhi"
-        }
-      ],
-      instructions: [
-        "Phone must be 10 digits starting with 6-9",
-        "Aadhar must be exactly 12 digits",
-        "Maximum 100 students per upload"
-      ]
-    };
-
-    res.json({
-      success: true,
-      template
-    });
-
-  } catch (error) {
-    console.error("Get template error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to get template"
+      message: "Internal server error during bulk upload",
+      error: process.env.NODE_ENV === "development" ? error.message : "Something went wrong",
     });
   }
 };

@@ -1,9 +1,9 @@
 // controllers/adminController.js
-import Admin from "../models/Admin.js";
-import { generateToken, generateDeviceId } from "../utils/jwt.js";
-import { getDeviceInfo } from "../utils/deviceFingerprint.js";
+import Admin from "../../models/admin.model.js";
+import { generateToken, generateDeviceId } from "../../utils/jwt.js";
+import { getDeviceInfo } from "../../utils/deviceFingerprint.js";
 import crypto from "crypto";
-import transporter from "../services/transporter.js";
+import transporter from "../../services/transporter.js";
 
 /**
  * Register Admin
@@ -84,36 +84,29 @@ export const verifyEmail = async (req, res) => {
     const { email, otp } = req.body;
 
     if (!email || !otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and OTP are required"
-      });
+      return res.status(400).json({ success: false, message: "Email and OTP are required" });
     }
 
     const admin = await Admin.findOne({ email: email.toLowerCase() });
-    if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found"
-      });
-    }
+    if (!admin) return res.status(404).json({ success: false, message: "Admin not found" });
 
-    // Check OTP
-    if (admin.otp !== otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid OTP"
-      });
-    }
+    if (admin.otp !== otp) return res.status(400).json({ success: false, message: "Invalid OTP" });
 
     // Verify admin
     admin.isVerify = true;
     admin.otp = null;
-    await admin.save();
 
-    // Generate token
-    const deviceId = generateDeviceId(req);
-    const token = generateToken(admin._id, deviceId, admin.tokenVersion);
+    // --- DEVICE SESSION ---
+    const deviceId = generateDeviceId(req); // Unique device ID
+    const deviceInfo = getDeviceInfo(req);  // { userAgent, ip }
+
+    admin.addSession(deviceInfo, deviceId); // <-- Add session
+    await admin.save(); // <-- Save session to DB
+
+    // Generate token with device info
+    const token = generateToken(admin._id, admin.name, admin.role, deviceId, admin.tokenVersion);
+
+    // console.log("Device sessions:", admin.deviceSessions);
 
     res.json({
       success: true,
@@ -129,10 +122,7 @@ export const verifyEmail = async (req, res) => {
 
   } catch (error) {
     console.error("Verify email error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Verification failed"
-    });
+    res.status(500).json({ success: false, message: "Verification failed" });
   }
 };
 
@@ -161,7 +151,7 @@ export const login = async (req, res) => {
     if (!admin.isVerify) {
       return res.status(400).json({
         success: false,
-        message: "Please verify your email first"
+        message: "Please verify your email  or register again. "
       });
     }
 
@@ -215,34 +205,15 @@ export const login = async (req, res) => {
 /**
  * Logout
  */
-export const logout = async (req, res) => {
-  try {
-    const admin = req.admin;
-    const deviceId = req.deviceId;
 
-    admin.logoutDevice(deviceId);
-    await admin.save();
-
-    res.json({
-      success: true,
-      message: "Logout successful"
-    });
-
-  } catch (error) {
-    console.error("Logout error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Logout failed"
-    });
-  }
-};
 
 /**
  * Logout All Devices
  */
-export const logoutAll = async (req, res) => {
+export const logout = async (req, res) => {
   try {
     const admin = req.admin;
+    console.log(admin)
     
     admin.logoutAllDevices();
     await admin.save();
@@ -267,6 +238,8 @@ export const logoutAll = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin._id).select("-password");
+
+    console.log(admin)
     
     res.json({
       success: true,

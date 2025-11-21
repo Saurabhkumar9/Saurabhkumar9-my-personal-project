@@ -1,18 +1,17 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI);
+    const conn = await mongoose.connect(process.env.URI);
 
-    console.log(` MongoDB Connected`);
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(" MongoDB Connection Failed");
-    console.error("Reason:", error.message);
-
-    // Exit process with failure (for production restart managers like PM2 / Docker)
+    console.error("MongoDB Connection Failed:");
+    console.error(error);
     process.exit(1);
   }
 };
 
 export default connectDB;
-

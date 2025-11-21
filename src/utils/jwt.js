@@ -20,7 +20,7 @@ export const generateToken = (userId, name, role, deviceId, tokenVersion) => {
   };
 
   return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || "1d",
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 };
 

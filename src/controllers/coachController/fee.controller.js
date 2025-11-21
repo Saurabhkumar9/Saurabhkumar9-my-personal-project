@@ -1,6 +1,6 @@
 // controllers/feeController.js
-import Student from '../../models/admin/student.model.js';
-import Batch  from '../../models/admin/batches.model.js'
+import Student from '../../models/student.model.js';
+import Batch  from '../../models/batches.model.js'
 
 
 

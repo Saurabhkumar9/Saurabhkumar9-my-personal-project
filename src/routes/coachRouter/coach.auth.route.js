@@ -1,29 +1,19 @@
 // routes/coach.js
 import express from "express";
 import {
-  sendOtp,
-  login,
-  getProfile,
-  updateProfile,
-  logout,
-  logoutAll,
-  getBatches
-} from "../controllers/coachController.js";
-import { coachAuth } from "../middlewares/coachAuth.js";
-import upload from "../middlewares/upload.js";
+ verifyCoachAndLogin,sendOtpForVerifyCoach,
+ getCoachById
+} from "../../controllers/coachController/coach.auth.controller.js";
+import { authenticateCoach } from "../../middleware/auth.coach.js";
 
-const router = express.Router();
+
+const CoachAuthRouter = express.Router();
 
 // Public routes
-router.post("/send-otp", sendOtp);
-router.post("/login", login);
+CoachAuthRouter.post('/send-opt', sendOtpForVerifyCoach)
+CoachAuthRouter.post('/login-coach', verifyCoachAndLogin)
 
-// Protected routes
-router.use(coachAuth);
-router.get("/profile", getProfile);
-router.put("/profile", upload.single("profile"), updateProfile);
-router.post("/logout", logout);
-router.post("/logout-all", logoutAll);
-router.get("/batches", getBatches);
 
-export default router;
+CoachAuthRouter.get('/fetch-coach-details',authenticateCoach,getCoachById)
+
+export default CoachAuthRouter;

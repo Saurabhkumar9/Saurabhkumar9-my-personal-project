@@ -1,5 +1,5 @@
-import Student from "../../models/admin/student.model.js";
-import handleErrors from "../../middlewares/errorHandler.js";
+import Student from "../../models/student.model.js";
+import handleErrors from "../../middleware/handleErrors.js";
 
 
 const attendanceMarked = async (req, res, next) => {

@@ -1,27 +1,25 @@
+// routes/studentRoutes.js
 import express from 'express';
 import {
   createStudent,
   getAllStudents,
-  getStudentById,
-  updateStudent,
+  
   deleteStudent,
-  getStudentsByBatch,
-  getStudentStatistics
-} from '../controllers/student.controller.js';
-import { authenticate, updateActivity } from '../middleware/auth.js';
+  
+} from '../../controllers/admin/student.controller.js';
+import { authenticateAdmin } from '../../middleware/auth.admin.js';
 
-const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate, updateActivity);
+const StudentRouter = express.Router();
 
-// Student CRUD operations
-router.post('/batch/:batchId', createStudent);
-router.get('/', getAllStudents);
-router.get('/statistics', getStudentStatistics);
-router.get('/batch/:batchId', getStudentsByBatch);
-router.get('/:id', getStudentById);
-router.put('/:id', updateStudent);
-router.delete('/:id', deleteStudent);
+StudentRouter.post('/register/student/:batchId',authenticateAdmin, createStudent);
+StudentRouter.get('/fetch-students',authenticateAdmin, getAllStudents);
 
-export default router;
+
+StudentRouter.delete('/delete/student/:id',authenticateAdmin, deleteStudent);
+
+
+
+
+
+export default StudentRouter;

@@ -20,9 +20,14 @@ const coachSchema = new mongoose.Schema(
       required: true,
     },
     
-    // Profile Image
-    profile: String,
-    profile_id: String,
+   profile: {
+      type: String,
+      default: null
+    },
+    profile_id: {
+      type: String,
+      default: null
+    },
 
     // Device Management (Max 2 devices)
     deviceSessions: [
@@ -47,7 +52,14 @@ const coachSchema = new mongoose.Schema(
     },
 
     // Verification
-    otp: String,
+    otp: {
+      type: String,
+      default: null
+    },
+    otpCreatedAt: {
+      type: Date,
+      default: null
+    },
     isVerify: {
       type: Boolean,
       default: false
@@ -58,11 +70,12 @@ const coachSchema = new mongoose.Schema(
       default: "coach",
     },
 
-    status: {
+   status: {
       type: String,
-      enum: ["active", "inactive"],
-      default: "active",
+      enum: ["active", "inactive", "suspended"],
+      default: "active"
     },
+
 
     // Security
     tokenVersion: {
@@ -106,11 +119,6 @@ coachSchema.methods.addSession = function(deviceInfo, deviceId) {
   }
 };
 
-// Update session activity
-coachSchema.methods.updateSessionActivity = function(deviceId) {
-  const session = this.deviceSessions.find(s => s.deviceId === deviceId);
-  if (session) session.lastActivity = new Date();
-};
 
 // Logout from specific device
 coachSchema.methods.logoutDevice = function(deviceId) {

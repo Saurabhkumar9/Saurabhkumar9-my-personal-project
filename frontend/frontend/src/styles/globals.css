@@ -1,0 +1,22 @@
+/* src/styles/globals.css */
+
+/* --- CSS VARIABLES (THEME) --- */
+:root{
+  --primary: #6366F1;      /* main accent */
+  --primary-dark: #4f46e5;
+  --muted: #64748B;
+  --bg: #F8FAFC;           /* page background */
+  --card-bg: #ffffff;
+  --success: #22C55E;
+  --danger: #EF4444;
+  --warning: #FACC15;
+  --shadow: 0 8px 30px rgba(14, 22, 37, 0.06);
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --radius-sm: 8px;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --font-heading: "Poppins", var(--font-sans);
+  --text-dark: #0F172A;
+  --text-muted: #475569;
+  --glass: rgba(99,102,241,0.06);
+}

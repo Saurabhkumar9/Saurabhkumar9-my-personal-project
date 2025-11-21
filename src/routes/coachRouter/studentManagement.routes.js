@@ -1,26 +1,23 @@
-import express from 'express';
-import {
-  getBatchDetails,
-  studentDetailsById,
-  studentEditById,
-  deleteStudentById,
-  createStudentByCoach
-} from '../controllers/studentManagement.controller.js';
-import { authenticate as adminAuth, updateActivity } from '../middleware/auth.js';
-import { authenticate as coachAuth } from '../middleware/coachAuth.js';
+// In your routes file (admin.routes.js)
+import express from "express";
 
-const router = express.Router();
+import { authenticateCoach } from "../../middleware/auth.coach.js";
+import { createStudentByCoach, deleteStudentById, getBatchDetails, studentDetailsById, studentEditById } from "../../controllers/coachController/studentManagement.controller.js";
+import { excelUploadStudentsByCoach } from "../../controllers/admin/excel.upload.controller.js";
 
-// Admin routes
-router.get('/batch/:batchId', adminAuth, updateActivity, getBatchDetails);
-router.get('/:studentId', adminAuth, updateActivity, studentDetailsById);
-router.put('/:studentId', adminAuth, updateActivity, studentEditById);
-router.delete('/:studentId', adminAuth, updateActivity, deleteStudentById);
+const CoachMangeRouter = express.Router();
 
 // Coach routes
-router.post('/coach/batch/:batchId', coachAuth, createStudentByCoach);
-router.get('/coach/batch/:batchId', coachAuth, getBatchDetails);
-router.get('/coach/:studentId', coachAuth, studentDetailsById);
-router.put('/coach/:studentId', coachAuth, studentEditById);
 
-export default router;
+
+CoachMangeRouter.get('/fetch-student/belong-to-coach/:batchId', getBatchDetails)
+CoachMangeRouter.get('/fetch-student-details/:studentId', studentDetailsById)
+CoachMangeRouter.post('/update/student/:studentId', studentEditById)
+CoachMangeRouter.delete('/delete/student/:studentId', deleteStudentById)
+CoachMangeRouter.post('/create/student/:batchId',authenticateCoach, createStudentByCoach)
+
+// excel uplaod by  coach
+CoachMangeRouter.post('/bulk-upload-students/:batchId',authenticateCoach, excelUploadStudentsByCoach)
+
+
+export default CoachMangeRouter;

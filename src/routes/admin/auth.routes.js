@@ -4,30 +4,30 @@ import {
   register,
   verifyEmail,
   login,
+ 
   logout,
-  logoutAll,
   getProfile,
   updateProfile,
   sendOtp,
   resetPassword
-} from "../controllers/adminController.js";
-import { authenticate } from "../middlewares/auth.js";
-import upload from "../middlewares/upload.js";
+} from "../../controllers/admin/auth.controller.js";
+import { authenticateAdmin } from "../../middleware/auth.admin.js";
+import upload from "../../middleware/upload.js";
 
-const router = express.Router();
+const authRouter = express.Router();
 
 // Public routes
-router.post("/register", register);
-router.post("/verify-email", verifyEmail);
-router.post("/login", login);
-router.post("/send-otp", sendOtp);
-router.post("/reset-password", resetPassword);
+authRouter.post("/register", register);
+authRouter.post("/verify-email", verifyEmail);
+authRouter.post("/login", login);
+authRouter.post("/otp-send-password", sendOtp);
+authRouter.post("/password-reset", resetPassword);
 
 // Protected routes
-router.use(authenticate);
-router.post("/logout", logout);
-router.post("/logout-all", logoutAll);
-router.get("/profile", getProfile);
-router.put("/profile", upload.single("profile"), updateProfile);
 
-export default router;
+
+authRouter.post("/logout", authenticateAdmin,logout);
+authRouter.get("/profile",authenticateAdmin, getProfile);
+authRouter.put("/profile",authenticateAdmin, upload.single("profile"), updateProfile);
+
+export default authRouter;
